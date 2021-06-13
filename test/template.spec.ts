@@ -1,5 +1,6 @@
 import * as path from 'path'
 import { mockBundleAndRun, normalizeNewline } from './utils'
+import { CompilerOptions } from '@vue/compiler-core'
 
 test('apply babel transformations to expressions in template', async () => {
   const { instance } = await mockBundleAndRun({
@@ -79,7 +80,28 @@ test('customizing template loaders', async () => {
   expect(instance.$el.textContent).toBe('hi')
 })
 
-test.todo('custom compiler options')
+test('custom compiler options', async () => {
+  const compilerOptions: CompilerOptions = {
+    nodeTransforms: [
+      function (node) {
+        if (node.type === 1) {
+          ;(node as any).tag = `transformed-${(node as any).tag}`
+        }
+      },
+    ],
+  }
+  const { instance } = await mockBundleAndRun({
+    entry: 'ScriptSetup.vue',
+    vue: { compilerOptions },
+  })
+  expect(instance.$el.tagName).toBe('transformed-button'.toUpperCase())
+
+  const { instance: inst2 } = await mockBundleAndRun({
+    entry: 'basic.vue',
+    vue: { compilerOptions },
+  })
+  expect(inst2.$el.tagName).toBe('transformed-h2'.toUpperCase())
+})
 
 test.todo('separate loader configuration for template lang and js imports')
 

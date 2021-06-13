@@ -1,14 +1,17 @@
 import webpack = require('webpack')
-import {
-  compileScript,
-  SFCDescriptor,
-  SFCScriptBlock,
-  TemplateCompiler,
-} from '@vue/compiler-sfc'
+import { compileScript, SFCDescriptor, SFCScriptBlock } from '@vue/compiler-sfc'
 import { VueLoaderOptions } from 'src'
+import { getTemplateCompilerOptions } from './templateLoader'
 
 const clientCache = new WeakMap<SFCDescriptor, SFCScriptBlock | null>()
 const serverCache = new WeakMap<SFCDescriptor, SFCScriptBlock | null>()
+
+export function getResolvedScript(
+  descriptor: SFCDescriptor,
+  isServer: boolean
+): SFCScriptBlock | null | undefined {
+  return (isServer ? serverCache : clientCache).get(descriptor)
+}
 
 /**
  * inline template mode can only be enabled if:
@@ -44,13 +47,6 @@ export function resolveScript(
 
   let resolved: SFCScriptBlock | null = null
 
-  let compiler: TemplateCompiler | undefined
-  if (typeof options.compiler === 'string') {
-    compiler = require(options.compiler)
-  } else {
-    compiler = options.compiler
-  }
-
   if (compileScript) {
     try {
       resolved = compileScript(descriptor, {
@@ -58,11 +54,12 @@ export function resolveScript(
         isProd,
         inlineTemplate: enableInline,
         babelParserPlugins: options.babelParserPlugins,
-        templateOptions: {
-          compiler,
-          ssr: isServer,
-          transformAssetUrls: options.transformAssetUrls || true,
-        },
+        templateOptions: getTemplateCompilerOptions(
+          options,
+          descriptor,
+          scopeId,
+          loaderContext
+        ),
       })
     } catch (e) {
       loaderContext.emitError(e)

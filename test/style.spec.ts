@@ -190,7 +190,9 @@ test('CSS Modules Extend', async () => {
 
   expect(instance.$el.className).toBe(instance.$style.red)
   const style = window.document.querySelectorAll('style')![1]!.textContent
-  expect(style).toContain(`.${instance.$style.red} {\n  color: #FF0000;\n}`)
+  expect(style!.trim()).toContain(
+    `.${instance.$style.red} {\r\n  color: #FF0000;\n}`
+  )
 })
 
 test.todo('experimental <style vars>')

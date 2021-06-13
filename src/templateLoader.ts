@@ -3,9 +3,56 @@ import * as qs from 'querystring'
 import * as loaderUtils from 'loader-utils'
 import { VueLoaderOptions } from './'
 import { formatError } from './formatError'
-import { compileTemplate, TemplateCompiler } from '@vue/compiler-sfc'
+import {
+  compileTemplate,
+  SFCDescriptor,
+  SFCTemplateCompileOptions,
+  TemplateCompiler,
+} from '@vue/compiler-sfc'
 import { getDescriptor } from './descriptorCache'
-import { resolveScript } from './resolveScript'
+import { getResolvedScript } from './resolveScript'
+
+export function getTemplateCompilerOptions(
+  options: VueLoaderOptions,
+  descriptor: SFCDescriptor,
+  scopeId: string,
+  loaderContext: webpack.loader.LoaderContext
+):
+  | Omit<SFCTemplateCompileOptions, 'source' | 'filename' | 'inMap'>
+  | undefined {
+  const block = descriptor.template
+  if (!block) {
+    return
+  }
+
+  const isProd = loaderContext.mode === 'production'
+  const isServer = options.isServerBuild ?? loaderContext.target === 'node'
+  const hasScoped = descriptor.styles.some((s) => s.scoped)
+  const resolvedScript = getResolvedScript(descriptor, isServer)
+
+  let compiler: TemplateCompiler | undefined
+  if (typeof options.compiler === 'string') {
+    compiler = require(options.compiler)
+  } else {
+    compiler = options.compiler
+  }
+
+  return {
+    id: scopeId,
+    scoped: hasScoped,
+    slotted: descriptor.slotted,
+    isProd,
+    ssr: isServer,
+    ssrCssVars: descriptor.cssVars,
+    compiler,
+    compilerOptions: {
+      ...options.compilerOptions,
+      scopeId: hasScoped ? `data-v-${scopeId}` : undefined,
+      bindingMetadata: resolvedScript ? resolvedScript.bindings : undefined,
+    },
+    transformAssetUrls: options.transformAssetUrls || true,
+  }
+}
 
 // Loader that compiles raw template into JavaScript functions.
 // This is injected by the global pitcher (../pitch) for template
@@ -19,43 +66,16 @@ const TemplateLoader: webpack.loader.Loader = function (source, inMap) {
   // ident to create the request for this loader in the pitcher.
   const options = (loaderUtils.getOptions(loaderContext) ||
     {}) as VueLoaderOptions
-
-  const isServer = options.isServerBuild ?? loaderContext.target === 'node'
-  const isProd = loaderContext.mode === 'production'
   const query = qs.parse(loaderContext.resourceQuery.slice(1))
   const scopeId = query.id as string
   const descriptor = getDescriptor(loaderContext.resourcePath)
-  const script = resolveScript(
-    descriptor,
-    query.id as string,
-    options,
-    loaderContext
-  )
-
-  let compiler: TemplateCompiler | undefined
-  if (typeof options.compiler === 'string') {
-    compiler = require(options.compiler)
-  } else {
-    compiler = options.compiler
-  }
 
   const compiled = compileTemplate({
-    source,
-    filename: loaderContext.resourcePath,
-    inMap,
+    ...getTemplateCompilerOptions(options, descriptor, scopeId, loaderContext),
     id: scopeId,
-    scoped: !!query.scoped,
-    slotted: descriptor.slotted,
-    isProd,
-    ssr: isServer,
-    ssrCssVars: descriptor.cssVars,
-    compiler,
-    compilerOptions: {
-      ...options.compilerOptions,
-      scopeId: query.scoped ? `data-v-${scopeId}` : undefined,
-      bindingMetadata: script ? script.bindings : undefined,
-    },
-    transformAssetUrls: options.transformAssetUrls || true,
+    filename: loaderContext.resourcePath,
+    source,
+    inMap,
   })
 
   // tips
